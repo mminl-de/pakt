@@ -69,9 +69,9 @@ for arg in "$@"; do
 			REMOVE_MODE=1
 			;;
 		"-"*)
-			#if the arg is part of the nonstdargs (has input after the arg e.g. --output ARG2.
-			#We dont want to interpret ARG2 as a package, therefor we skip it)
-			for nonstdarg in $NON_STD_ARGS; do
+			# If the arg is part of the nonstdargs (has input after the arg e.g. --output ARG2),
+			# we don't want to interpret ARG2 as a package, therefore we skip it.
+			for nonstdarg in ${NON_STD_ARGS:-}; do
 				if [ "$arg" -eq "$nonstdarg" ]; then
 					SKIP_ARG=1
 				fi

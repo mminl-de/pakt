@@ -17,14 +17,14 @@ rm -v /etc/pakt.conf.default
 
 # Config
 while true; do
-	read -p "Do you want to remove your config at /etc/pakt.conf? [Y/n] " response
+	read -p "Do you want to remove your config at /etc/pakt.conf? [y/N] " response
 
 	case "$response" in
-		[Yy]|[Yy][Ee][Ss]|"")
+		[Yy]|[Yy][Ee][Ss])
 			rm -v /etc/pakt.conf
 			break
 			;;
-		[Nn]|[Nn][Oo])
+		[Nn]|[Nn][Oo]|"")
 			break
 			;;
 		*)

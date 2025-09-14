@@ -1,153 +1,59 @@
 #!/bin/sh
-# Pakt (PAcman KaTegories) - Pacman wrapper for categorizing packages
-# v0.1.0 GPL-2.0
-# https://github.com/mrminede/pakt
 
-# Help message part.
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-	echo "PAKT: Displaying your package manager's help message.
-	If you wanted to see pakt, see the man page at \`man pakt\`
-	"
-fi
+set -eu
 
-# Save all the packages for a group of categories temporarily in /tmp.
-# This is needed, because we allow different categories for different packages.
-# We could do this with an array of some sort, but would lose POSIX-compliancy.
-pkg_tempsave() {
-	for cat in $(echo "$CATS" | tr ' ' '\n'); do
-		for pkg in $PKGS; do
-			echo "$pkg" >> /tmp/pakt/"$cat"
-		done
-	done
-
-	PKGS=""
-	CATS="$DEFAULT_CATEGORIES"
-}
-
-# Strict mode. The script will throw an error on an unbound variable encounter.
-set -u
-
-# Temporary path storing new package and category data.
-mkdir -p "/tmp/pakt"
-
-# Check whether the data path was defined with XDG.
-if [ -z "${XDG_DATA_HOME:-}" ]; then
-	DATA_PATH="$HOME/.local/share/pakt"
-else
-	DATA_PATH="$XDG_DATA_HOME/pakt"
-fi
-mkdir -p "$DATA_PATH"
-
-# Control/set config path variable.
-if [ -z "${PAKT_CONF_PATH:-}" ]; then
-	PAKT_CONF_PATH="/etc"
-fi
-
-# Check whether pakt.conf exists in the first place.
-if [ ! -e "$PAKT_CONF_PATH/pakt.conf" ]; then
-	echo "PAKT: ERROR: /etc/pakt.conf not found. Exiting ..."
-	exit 1
-fi
+: "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
+: "${PAKT_EDITOR:=${EDITOR:-nano}}"
 
 . "$PAKT_CONF_PATH/pakt.conf"
 
-# Process variables
-CMD="$PACKAGE_MANAGER"
-CATS="$DEFAULT_CATEGORIES"
-PKGS=""
-IS_TRANSACTION_COMMAND=0
-TRANSACTION_READY=1
-REMOVE_MODE=0
-
-for arg in "$@"; do
-	case "$arg" in
-		"-S"*)
-			CMD="${CMD} ${arg}"
-			;;
-		"-R"*)
-			CMD="${CMD} ${arg}"
-			REMOVE_MODE=1
-			;;
-		"-"*)
-			# If the arg is part of the nonstdargs (has input after the arg e.g. --output ARG2),
-			# we don't want to interpret ARG2 as a package, therefore we skip it.
-			for nonstdarg in ${NON_STD_ARGS:-}; do
-				if [ "$arg" -eq "$nonstdarg" ]; then
-					SKIP_ARG=1
-				fi
-			done
-			;;
-		"++")
-			CATS=$(ls "$DATA_PATH")
-			;;
-		"+"*)
-			# Split up comma-separated categories (+cat1,cat2,test,cli).
-			arg=$(echo "$arg" | tr ',' ' ')
-			CATS="${CATS} ${arg#+}"
-
-			# This is used to detect when a package is declared after a category.
-			# When that happens, we want to first save the package and category data before resetting both.
-			TRANSACTION_READY=0
-			;;
-		*)
-			if [ $SKIP_ARG -eq 1 ]; then
-				SKIP_ARG=0
-				continue
-			fi
-
-			# See comment above.
-			if [ "$TRANSACTION_READY" -eq 0 ]; then
-				pkg_tempsave
-				TRANSACTION_READY=1
-			fi
-
-			CMD="${CMD} ${arg}"
-			PKGS="${PKGS} ${arg}"
-			;;
-	esac
-done
-
-# Save the last packages.
-pkg_tempsave
-
-# Execute pacman.
-$CMD
-
-if [ "$IS_TRANSACTION_COMMAND" -eq 1 ]; then
-	echo "PAKT: NOTE: this doesn't look like a job for me. Exiting ..."
-	exit 1
-fi
-
-if [ ! "$?" ]; then
-	echo "PAKT: ERROR: package manager failed. Exiting..."
-	exit 1
-fi
-
-# Omit the rest of the script if no category tomfoolery was performed.
-if [ ! "$(ls /tmp/pakt)" ]; then
+if [ $# -eq 0 ]; then
+	"${NO_ARG_ACTION[@]}"
 	exit
 fi
 
-for tmpfile in /tmp/pakt/*; do
-	catfile=$DATA_PATH/`basename $tmpfile`
-	touch $catfile
+help() {
+	printf "pakt – a package manager wrapper with category support
 
-	for pkg in $(cat "$tmpfile"); do
-		if [ "$REMOVE_MODE" -eq 1 ]; then
-			# Remove package from category file.
-			# You can't pipe directly into tmpfile because it would encounter an empty file.
-			sed -i "/^$pkg$/d" "$catfile"
-		elif [ "$pkg" != "$(grep "^$pkg\$" "$catfile")" ]; then
-			# Add package to category file, if not already there.
-			echo "$pkg" >> "$catfile"
-		fi
-	done
-done
+Usage:
+    pakt
+    pakt install
+    pakt uninstall
+    pakt dry
+    pakt sync
+    pakt find
+    pakt nat
+    pakt edit
+    pakt help\n"
+}
 
-# At last we want to clean up, so we don't work on the packages from last time.
-rm -r "/tmp/pakt"
+error() {
+	printf "Invalid subcommand '$1'!\nSee 'pakt help' for available options!\n"
+}
 
-# Clear empty catfiles from DATA_PATH. See the third setting in your `pakt.conf`.
-if [ "$REMOVE_EMPTY_CATFILES" -eq 1 ]; then
-	find "$DATA_PATH" -type f -empty -delete
-fi
+case "$1" in
+	"install"|"i")
+		;;
+	"uninstall"|"u")
+		;;
+	"dry"|"d")
+		;;
+	"sync"|"s")
+		;;
+	"find"|"f")
+		;;
+	"nat"|"n")
+		shift
+		"$PACKAGE_MANAGER" "$@"
+		;;
+	"edit"|"e")
+		;;
+	"help"|"h")
+		help
+		exit
+		;;
+	*)
+		error "$1"
+		exit
+		;;
+esac

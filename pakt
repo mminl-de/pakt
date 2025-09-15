@@ -6,7 +6,7 @@ set -eu
 # TODO FINAL /etc support
 : "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
 : "${PAKT_EDITOR:=${EDITOR:-nano}}"
-: "${CATEGORY_SYNTAX:="+"}"
+: "${CAT_SYNTAX:="+"}"
 : "${NO_ARG_ACTION:="pakt help"}"
 : "${PAKT_CAT_PATH:=${XDG_DATA_HOME:-$HOME/.local/share}/pakt}"
 mkdir -p "$PAKT_CAT_PATH"
@@ -28,7 +28,8 @@ Usage:
     pakt uninstall
     pakt dry-install
     pakt dry-uninstall
-    pakt sync
+    pakt sync-install
+    pakt sync-uninstall
     pakt find
     pakt native
     pakt edit
@@ -48,10 +49,10 @@ construct_pairs() {
 
 	for arg; do
 		case "$arg" in
-			$CATEGORY_SYNTAX$CATEGORY_SYNTAX)
+			$CAT_SYNTAX$CAT_SYNTAX)
 				cats=$(ls "$PAKT_CAT_PATH")
 				;;
-			$CATEGORY_SYNTAX*)
+			$CAT_SYNTAX*)
 				cats="$cats ${arg#?}"
 				;;
 			-*)
@@ -101,6 +102,23 @@ delete_from_pairs() {
 	done
 }
 
+construct_file_list() {
+	files=""
+	for arg; do
+		case "$arg" in
+			$CAT_SYNTAX$CAT_SYNTAX)
+				files=$(find "$PAKT_CAT_PATH")
+				;;
+			$CAT_SYNTAX*)
+				files="$files $PAKT_CAT_PATH/${arg#?}"
+				;;
+			*)
+				files="$files $arg"
+				;;
+		esac
+	done
+}
+
 # TODO NOTE idea about storing categories
 # a grand string with this format:
 # "pkg cat
@@ -108,6 +126,7 @@ delete_from_pairs() {
 # pkg2 cat
 # pkg2 cat2"
 
+# TODO NOW handle no args on subcommands
 case "$1" in
 	install|i)
 		shift
@@ -135,9 +154,24 @@ case "$1" in
 
 		[ $REMOVE_EMPTY_CATS -eq 1 ] && find "$PAKT_CAT_PATH" -empty -delete || true
 		;;
-	sync|s)
+	sync-install|si)
+		shift
+		construct_file_list
+		$PACKAGE_MANAGER $INSTALL_ARG $(grep -rvh "#" $files)
+		;;
+	sync-uninstall|su)
+		shift
+		construct_file_list
+		$PACKAGE_MANAGER $UNINSTALL_ARG $(grep -rvh "#" $files)
 		;;
 	find|f)
+		# TODO NOW CONSIDER OPTIMIZE
+		shift
+		for arg; do
+			for file in $(grep -rl "$arg" "$PAKT_CAT_PATH"); do
+				basename "$file"
+			done
+		done
 		;;
 	native|n)
 		shift

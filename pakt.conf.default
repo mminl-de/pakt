@@ -4,7 +4,7 @@
 
 # PAKT_EDITOR="nvim"
 
-# CATEGORY_SYNTAX="+"
+# CAT_SYNTAX="+"
 
 PACKAGE_MANAGER="paru"
 INSTALL_ARG="-S"

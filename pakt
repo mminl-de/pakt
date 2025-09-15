@@ -91,8 +91,8 @@ construct_pairs() {
 	update_pairs
 }
 
-# Adds new lines of the format "<pkg> $cats" to $pairs, where <pkg> every package
-# listed in $pkgs.
+# Adds new lines of the format "<pkg> $cats" to $pairs, where <pkg> is every
+# package listed in $pkgs.
 # Sets both $pkgs and $cats to empty strings afterwards.
 update_pairs() {
 	for pkg in "$pkgs"; do
@@ -156,12 +156,20 @@ construct_file_list() {
 case "$1" in
 	install|i)
 		shift
+		if [ $# -eq 0 ]; then
+			error "Missing package names!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
 		construct_pairs "$@"
 		cmd="$PACKAGE_MANAGER $INSTALL_ARG $cmd_args"
 		$cmd && write_from_pairs
 		;;
 	uninstall|u)
 		shift
+		if [ $# -eq 0 ]; then
+			error "Missing package names!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
 		construct_pairs "$@"
 		cmd="$PACKAGE_MANAGER $UNINSTALL_ARG $cmd_args"
 		$cmd && delete_from_pairs
@@ -170,11 +178,19 @@ case "$1" in
 		;;
 	dry-install|di)
 		shift
+		if [ $# -eq 0 ]; then
+			error "Missing package names!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
 		construct_pairs "$@"
 		write_from_pairs
 		;;
 	dry-uninstall|du)
 		shift
+		if [ $# -eq 0 ]; then
+			error "Missing package names!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
 		construct_pairs "$@"
 		delete_from_pairs
 
@@ -182,14 +198,21 @@ case "$1" in
 		;;
 	sync-install|si)
 		shift
+		if [ $# -eq 0 ]; then
+			error "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
 		construct_file_list "$@"
 		$PACKAGE_MANAGER $INSTALL_ARG $(grep -rvh "#" $files)
 		;;
 	sync-uninstall|su)
-		# TODO NOW make this command behave with no further args
 		shift
+		if [ $# -eq 0 ]; then
+			error "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
 		construct_file_list "$@"
-		$PACKAGE_MANAGER $UNINSTALL_ARG $(grep -rvh "#" $files)
+		echo "$PACKAGE_MANAGER $UNINSTALL_ARG $(grep -rvh "#" $files)"
 		;;
 	find|f)
 		# TODO return 1 if there are no results

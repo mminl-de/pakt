@@ -26,7 +26,8 @@ Usage:
     pakt
     pakt install
     pakt uninstall
-    pakt dry
+    pakt dry-install
+    pakt dry-uninstall
     pakt sync
     pakt find
     pakt native
@@ -82,7 +83,7 @@ write_from_pairs() {
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			grep -qF "$pkg" "$file" || echo "$pkg" >> "$file"
+			grep -qF "$pkg" "$file" 2>/dev/null || echo "$pkg" >> "$file"
 		done
 	done
 }
@@ -119,8 +120,20 @@ case "$1" in
 		construct_pairs "$@"
 		cmd="$PACKAGE_MANAGER $UNINSTALL_ARG $cmd_args"
 		$cmd && delete_from_pairs
+
+		[ $REMOVE_EMPTY_CATS -eq 1 ] && find "$PAKT_CAT_PATH" -empty -delete || true
 		;;
-	dry|d)
+	dry-install|di)
+		shift
+		construct_pairs "$@"
+		write_from_pairs
+		;;
+	dry-uninstall|du)
+		shift
+		construct_pairs "$@"
+		delete_from_pairs
+
+		[ $REMOVE_EMPTY_CATS -eq 1 ] && find "$PAKT_CAT_PATH" -empty -delete || true
 		;;
 	sync|s)
 		;;

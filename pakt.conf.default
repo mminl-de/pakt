@@ -2,7 +2,7 @@
 
 # PAKT_CAT_PATH=$XDG_DATA_HOME
 
-# PAKT_EDITOR="nvim"
+PAKT_EDITOR="nvim"
 
 # CAT_SYNTAX="+"
 

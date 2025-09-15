@@ -1,9 +1,15 @@
 #!/bin/sh
+# pakt – a package manager wrapper with support for categorizing
+# v1.0.0  GPL-3.0
+# https://github.com/mminl-de/pakt
+
+# TODO FINAL CONSIDER let users use multiple instances of pakt for different package managers
 # TODO FINAL COMMENT ALL
+# TODO FINAL /etc support
 
 set -eu
 
-# TODO FINAL /etc support
+# Setting default options for config variables
 : "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
 : "${PAKT_EDITOR:=${EDITOR:-nano}}"
 : "${CAT_SYNTAX:="+"}"
@@ -18,29 +24,46 @@ if [ $# -eq 0 ]; then
 	exit
 fi
 
-# TODO write proper help message
+# TODO NOW READ proper syntax instead of the [ ]
+# Just prints a help message.
 help() {
-	echo "pakt – a package manager wrapper with category support
+	echo "pakt – a package manager wrapper with support for categorizing
 
 Usage:
-    pakt
-    pakt install
-    pakt uninstall
-    pakt dry-install
-    pakt dry-uninstall
-    pakt sync-install
-    pakt sync-uninstall
-    pakt find
-    pakt native
-    pakt edit
-    pakt help"
+  pakt                                        perform a user-defined arbitrary action
+  pakt install          [pkg ... +cat +...]   install packages
+  pakt uninstall        [pkg ... +cat +...]   uninstall packages
+  pakt dry-install      [pkg ... +cat +...]   write packages into categories without
+                                                installing them
+  pakt dry-uninstall    [pkg ... +cat +...]   remove packages from categories without
+                                                uninstalling them
+  pakt sync-install     [file | +cat]         install several packages from categories
+                                                or arbitrary files
+  pakt sync-uninstall   [file | +cat]         uninstall several packages from categories
+                                                or arbitary files
+  pakt find             [package ...]         list categories the given packages are in
+  pakt native           [args]                perform a regular package manager operation
+  pakt edit             [file | +cat]         manually edit category or arbitary files
+  pakt help                                   print this message
+
+Configuration:
+  $HOME/.config/pakt.conf" # TODO
 }
 
+# Prints a given message in red.
 error() {
-	echo "\x1b[31mInvalid subcommand '$1'!
-See 'pakt help' for available options!\x1b[39m"
+	printf "\x1b[31m$1\x1b[39m\n"
 }
 
+# Constructs a multiline string table of involved packages and their corresponding
+# categories, given an argument list, and stores it in $pairs.
+# Parses package manager flags and saves them in $cmd_args.
+# $pairs has this format:
+#
+# pkg1 cat1 cat2 ... catN
+# pkg2 cat1 ...
+# pkg3 ...
+# ...
 construct_pairs() {
 	cmd_args=""
 	pairs=""
@@ -68,6 +91,9 @@ construct_pairs() {
 	update_pairs
 }
 
+# Adds new lines of the format "<pkg> $cats" to $pairs, where <pkg> every package
+# listed in $pkgs.
+# Sets both $pkgs and $cats to empty strings afterwards.
 update_pairs() {
 	for pkg in "$pkgs"; do
 		pairs="$pairs $pkg $cats\n"
@@ -76,6 +102,8 @@ update_pairs() {
 	cats=""
 }
 
+# Reads the table expressed in $pairs and writes the names of the packages into
+# the files of their assigned categories, only if they weren't listed there before.
 write_from_pairs() {
 	printf "$pairs\n" | while IFS= read -r line; do
 		[ -z "$line" ] && continue
@@ -89,6 +117,8 @@ write_from_pairs() {
 	done
 }
 
+# Reads the table expressed in $pairs and removes the names of the packages from
+# the files of their assigned categories.
 delete_from_pairs() {
 	printf "$pairs\n" | while IFS= read -r line; do
 		[ -z "$line" ] && continue
@@ -102,6 +132,9 @@ delete_from_pairs() {
 	done
 }
 
+# Takes a list of arguments, replaces those starting with the
+# Pakt category syntax marker with their respective category files and stores
+# the resulting list in $files.
 construct_file_list() {
 	files=""
 	for arg; do
@@ -118,13 +151,6 @@ construct_file_list() {
 		esac
 	done
 }
-
-# TODO NOTE idea about storing categories
-# a grand string with this format:
-# "pkg cat
-# pkg cat2
-# pkg2 cat
-# pkg2 cat2"
 
 # TODO NOW handle no args on subcommands
 case "$1" in
@@ -156,17 +182,24 @@ case "$1" in
 		;;
 	sync-install|si)
 		shift
-		construct_file_list
+		construct_file_list "$@"
 		$PACKAGE_MANAGER $INSTALL_ARG $(grep -rvh "#" $files)
 		;;
 	sync-uninstall|su)
+		# TODO NOW make this command behave with no further args
 		shift
-		construct_file_list
+		construct_file_list "$@"
 		$PACKAGE_MANAGER $UNINSTALL_ARG $(grep -rvh "#" $files)
 		;;
 	find|f)
+		# TODO return 1 if there are no results
 		# TODO NOW CONSIDER OPTIMIZE
+		# ie buffering instead of printing line-by-line
 		shift
+		[ $# -eq 0 ] && {
+			error "Missing package names!\nSee 'pakt help' for correct usage!"
+			exit 1
+		}
 		for arg; do
 			for file in $(grep -rl "$arg" "$PAKT_CAT_PATH"); do
 				basename "$file"
@@ -178,13 +211,18 @@ case "$1" in
 		$PACKAGE_MANAGER "$@"
 		;;
 	edit|e)
+		shift
+		# TODO CONSIDER using "$@" instead of $@
+		construct_file_list "$@"
+		$PAKT_EDITOR $files
 		;;
 	help|h)
 		help
 		exit
 		;;
 	*)
-		error "$1"
-		exit
+		error "Invalid subcommand '$1'!
+See 'pakt help' for available options!\x1b[39m"
+		exit 1
 		;;
 esac

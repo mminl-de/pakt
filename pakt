@@ -51,7 +51,7 @@ construct_pairs() {
 				cats=$(ls "$PAKT_CAT_PATH")
 				;;
 			$CATEGORY_SYNTAX*)
-				cats="$cats $arg"
+				cats="$cats ${arg#?}"
 				;;
 			-*)
 				cmd_args="$cmd_args $arg"
@@ -75,26 +75,23 @@ update_pairs() {
 }
 
 write_from_pairs() {
-	echo "TODO write_from_pairs"
 	printf "$pairs\n" | while IFS= read -r line; do
-		echo "    TODO line $line"
-		set -- "$line"
-		pkg=$1
+		[ -z "$line" ] && continue
+		set -- $line
+		pkg="$1"
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			[ grep -q "$pkg" "$file" ] || {
-				echo "TODO :D"
-				echo "$pkg" >> "$file"
-			}
+			grep -qF "$pkg" "$file" || echo "$pkg" >> "$file"
 		done
 	done
 }
 
 delete_from_pairs() {
 	printf "$pairs\n" | while IFS= read -r line; do
-		set -- "$line"
-		pkg=$1
+		[ -z "$line" ] && continue
+		set -- $line
+		pkg="$1"
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
@@ -110,28 +107,18 @@ delete_from_pairs() {
 # pkg2 cat
 # pkg2 cat2"
 
-# TODO NOW handle case "pakt i +cat" and "pakt u +cat"
 case "$1" in
 	install|i)
 		shift
 		construct_pairs "$@"
-		echo "TODO pairs: $pairs"
 		cmd="$PACKAGE_MANAGER $INSTALL_ARG $cmd_args"
 		$cmd && write_from_pairs
-
-		echo "TODO debug"
-		echo "$pairs"
-		printf "debug end\n\n"
 		;;
 	uninstall|u)
 		shift
 		construct_pairs "$@"
 		cmd="$PACKAGE_MANAGER $UNINSTALL_ARG $cmd_args"
 		$cmd && delete_from_pairs
-
-		echo "TODO debug"
-		echo "$pairs"
-		printf "debug end\n\n"
 		;;
 	dry|d)
 		;;

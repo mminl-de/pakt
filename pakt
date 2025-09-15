@@ -1,19 +1,26 @@
 #!/bin/sh
+# TODO FINAL COMMENT ALL
 
 set -eu
 
+# TODO FINAL /etc support
 : "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
 : "${PAKT_EDITOR:=${EDITOR:-nano}}"
+: "${CATEGORY_SYNTAX:="+"}"
+: "${NO_ARG_ACTION:="pakt help"}"
+: "${PAKT_CAT_PATH:=${XDG_DATA_HOME:-$HOME/.local/share}/pakt}"
+mkdir -p "$PAKT_CAT_PATH"
 
 . "$PAKT_CONF_PATH/pakt.conf"
 
 if [ $# -eq 0 ]; then
-	"${NO_ARG_ACTION[@]}"
+	$NO_ARG_ACTION
 	exit
 fi
 
+# TODO write proper help message
 help() {
-	printf "pakt – a package manager wrapper with category support
+	echo "pakt – a package manager wrapper with category support
 
 Usage:
     pakt
@@ -22,33 +29,123 @@ Usage:
     pakt dry
     pakt sync
     pakt find
-    pakt nat
+    pakt native
     pakt edit
-    pakt help\n"
+    pakt help"
 }
 
 error() {
-	printf "Invalid subcommand '$1'!\nSee 'pakt help' for available options!\n"
+	echo "\x1b[31mInvalid subcommand '$1'!
+See 'pakt help' for available options!\x1b[39m"
 }
 
-case "$1" in
-	"install"|"i")
-		;;
-	"uninstall"|"u")
-		;;
-	"dry"|"d")
-		;;
-	"sync"|"s")
-		;;
-	"find"|"f")
-		;;
-	"nat"|"n")
+construct_pairs() {
+	cmd_args=""
+	pairs=""
+	pkgs=""
+	cats=""
+
+	for arg; do
+		case "$arg" in
+			$CATEGORY_SYNTAX$CATEGORY_SYNTAX)
+				cats=$(ls "$PAKT_CAT_PATH")
+				;;
+			$CATEGORY_SYNTAX*)
+				cats="$cats $arg"
+				;;
+			-*)
+				cmd_args="$cmd_args $arg"
+				;;
+			*)
+				[ -n "$cats" ] && update_pairs
+				pkgs="$pkgs $arg"
+				cmd_args="$cmd_args $arg"
+				;;
+		esac
+	done
+	update_pairs
+}
+
+update_pairs() {
+	for pkg in "$pkgs"; do
+		pairs="$pairs $pkg $cats\n"
+	done
+	pkgs=""
+	cats=""
+}
+
+write_from_pairs() {
+	echo "TODO write_from_pairs"
+	printf "$pairs\n" | while IFS= read -r line; do
+		echo "    TODO line $line"
+		set -- "$line"
+		pkg=$1
 		shift
-		"$PACKAGE_MANAGER" "$@"
+		for cat; do
+			file="$PAKT_CAT_PATH/$cat"
+			[ grep -q "$pkg" "$file" ] || {
+				echo "TODO :D"
+				echo "$pkg" >> "$file"
+			}
+		done
+	done
+}
+
+delete_from_pairs() {
+	printf "$pairs\n" | while IFS= read -r line; do
+		set -- "$line"
+		pkg=$1
+		shift
+		for cat; do
+			file="$PAKT_CAT_PATH/$cat"
+			sed -i "/^$pkg$/d" "$file"
+		done
+	done
+}
+
+# TODO NOTE idea about storing categories
+# a grand string with this format:
+# "pkg cat
+# pkg cat2
+# pkg2 cat
+# pkg2 cat2"
+
+# TODO NOW handle case "pakt i +cat" and "pakt u +cat"
+case "$1" in
+	install|i)
+		shift
+		construct_pairs "$@"
+		echo "TODO pairs: $pairs"
+		cmd="$PACKAGE_MANAGER $INSTALL_ARG $cmd_args"
+		$cmd && write_from_pairs
+
+		echo "TODO debug"
+		echo "$pairs"
+		printf "debug end\n\n"
 		;;
-	"edit"|"e")
+	uninstall|u)
+		shift
+		construct_pairs "$@"
+		cmd="$PACKAGE_MANAGER $UNINSTALL_ARG $cmd_args"
+		$cmd && delete_from_pairs
+
+		echo "TODO debug"
+		echo "$pairs"
+		printf "debug end\n\n"
 		;;
-	"help"|"h")
+	dry|d)
+		;;
+	sync|s)
+		;;
+	find|f)
+		;;
+	native|n)
+		shift
+		$PACKAGE_MANAGER "$@"
+		;;
+	edit|e)
+		;;
+	help|h)
 		help
 		exit
 		;;

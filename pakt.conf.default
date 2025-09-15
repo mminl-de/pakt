@@ -4,11 +4,13 @@
 
 # PAKT_EDITOR="nvim"
 
+# CATEGORY_SYNTAX="+"
+
 PACKAGE_MANAGER="paru"
 INSTALL_ARG="-S"
 UNINSTALL_ARG="-Rcnsu"
 
-# NO_ARG_ACTION=(pakt help)
+# NO_ARG_ACTION="pakt help"
 
 # DEFAULT_CATEGORIES="default"
 # REMOVE_EMPTY_CATFILES=0

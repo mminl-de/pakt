@@ -12,6 +12,6 @@ UNINSTALL_ARG="-Rcnsu"
 
 # NO_ARG_ACTION="pakt help"
 
-# DEFAULT_CATEGORIES="default"
+DEFAULT_CATS="default"
 
 REMOVE_EMPTY_CATS=1

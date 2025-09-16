@@ -3,10 +3,6 @@
 # v1.0.0  GPL-3.0
 # https://github.com/mminl-de/pakt
 
-# TODO FINAL CONSIDER let users use multiple instances of pakt for different package managers
-# TODO FINAL COMMENT ALL
-# TODO FINAL /etc support
-
 set -eu
 
 # Setting default options for config variables
@@ -15,6 +11,7 @@ set -eu
 : "${CAT_SYNTAX:="+"}"
 : "${NO_ARG_ACTION:="pakt help"}"
 : "${PAKT_CAT_PATH:=${XDG_DATA_HOME:-$HOME/.local/share}/pakt}"
+: "${DEFAULT_CATS:=""}"
 mkdir -p "$PAKT_CAT_PATH"
 
 . "$PAKT_CONF_PATH/pakt.conf"
@@ -24,30 +21,31 @@ if [ $# -eq 0 ]; then
 	exit
 fi
 
-# TODO NOW READ proper syntax instead of the [ ]
 # Just prints a help message.
 help() {
 	echo "pakt – a package manager wrapper with support for categorizing
 
 Usage:
-  pakt                                        perform a user-defined arbitrary action
-  pakt install          [pkg ... +cat +...]   install packages
-  pakt uninstall        [pkg ... +cat +...]   uninstall packages
-  pakt dry-install      [pkg ... +cat +...]   write packages into categories without
+    pakt                                      perform a user-defined arbitrary action
+    pakt install        (pkg [+cat ...])...   install packages
+    pakt uninstall      (pkg [+cat ...])...   uninstall packages
+    pakt dry-install    (pkg [+cat ...])...   write packages into categories without
                                                 installing them
-  pakt dry-uninstall    [pkg ... +cat +...]   remove packages from categories without
+    pakt dry-uninstall  (pkg [+cat ...])...   remove packages from categories without
                                                 uninstalling them
-  pakt sync-install     [file | +cat]         install several packages from categories
+    pakt sync-install   (file | +cat)...      install several packages from categories
                                                 or arbitrary files
-  pakt sync-uninstall   [file | +cat]         uninstall several packages from categories
+    pakt sync-uninstall (file | +cat)...      uninstall several packages from categories
                                                 or arbitary files
-  pakt find             [package ...]         list categories the given packages are in
-  pakt native           [args]                perform a regular package manager operation
-  pakt edit             [file | +cat]         manually edit category or arbitary files
-  pakt help                                   print this message
+    pakt list           list-arg...           list all user-defined categories
+    pakt cat            +cat...               list all packages in the given categories
+    pakt find           pkg...                list categories the given packages are in
+    pakt native         arg...                perform a regular package manager operation
+    pakt edit           (file | +cat)...      manually edit category or arbitary files
+    pakt help                                 print this message
 
 Configuration:
-  $HOME/.config/pakt.conf" # TODO
+    $PAKT_CONF_PATH/pakt.conf"
 }
 
 # Prints a given message in red.
@@ -96,7 +94,7 @@ construct_pairs() {
 # Sets both $pkgs and $cats to empty strings afterwards.
 update_pairs() {
 	for pkg in "$pkgs"; do
-		pairs="$pairs $pkg $cats\n"
+		pairs="$pairs $pkg $cats $DEFAULT_CATS\n"
 	done
 	pkgs=""
 	cats=""
@@ -112,7 +110,7 @@ write_from_pairs() {
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			grep -qF "$pkg" "$file" 2>/dev/null || echo "$pkg" >> "$file"
+			grep -F "$pkg" "$file" >/dev/null 2>&1 || echo "$pkg" >> "$file"
 		done
 	done
 }
@@ -152,7 +150,6 @@ construct_file_list() {
 	done
 }
 
-# TODO NOW handle no args on subcommands
 case "$1" in
 	install|i)
 		shift
@@ -214,20 +211,33 @@ case "$1" in
 		construct_file_list "$@"
 		echo "$PACKAGE_MANAGER $UNINSTALL_ARG $(grep -rvh "#" $files)"
 		;;
+	list|l)
+		shift
+		ls "$@" "$PAKT_CAT_PATH"
+		;;
+	cat|c)
+		shift
+		if [ $# -eq 0 ]; then
+			error "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
+			exit 1
+		fi
+		construct_file_list "$@"
+		echo $(grep -rvh "#" $files)
+		;;
 	find|f)
-		# TODO return 1 if there are no results
-		# TODO NOW CONSIDER OPTIMIZE
-		# ie buffering instead of printing line-by-line
 		shift
 		[ $# -eq 0 ] && {
 			error "Missing package names!\nSee 'pakt help' for correct usage!"
 			exit 1
 		}
+		result=""
 		for arg; do
 			for file in $(grep -rl "$arg" "$PAKT_CAT_PATH"); do
-				basename "$file"
+				result="$result$(basename "$file")\n"
 			done
 		done
+		[ -z "$result" ] && exit 1
+		printf "$result"
 		;;
 	native|n)
 		shift
@@ -235,7 +245,6 @@ case "$1" in
 		;;
 	edit|e)
 		shift
-		# TODO CONSIDER using "$@" instead of $@
 		construct_file_list "$@"
 		$PAKT_EDITOR $files
 		;;

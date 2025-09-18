@@ -1,26 +1,9 @@
-# This is the example config file for pakt.
-# The config is a pure shell script that gets directly sourced into the program.
-# Therefore, you should make sure that you get the variables correct as pakt will try to run the command with sudo!
-# If you want to be extra cautious, make it read-only for normal users.
-# Also be warned about the possibilities of defining PAKT_CONF_PATH.
+# PAKT_EDITOR="nvim"
+# CAT_SYNTAX="+"
+#
+# PACKAGE_MANAGER="paru"
+# INSTALL_REGEX=".*-S(?:\s*-[yu]+)*.*"
+# UNINSTALL_REGEX=".*-R.*"
 
-# This defines the default categories that are always included when running pakt.
-DEFAULT_CATEGORIES="default"
 
-# Pacman or an AUR helper that you want to use. Also some other options of it.
-# If you want to use a tool that is normally invoked with sudo (or doas), include it here.
-PACKAGE_MANAGER="sudo pacman"
-
-# Whether pakt should automatically remove category files if they become empty.
-# 0 - no
-# 1 - yes
-REMOVE_EMPTY_CATFILES=0
-
-# There are arguments, that take another argument for themselves, e.g. --output ARG2
-# pakt only filters arguments with - on front and therefor would interpret ARG2 as an package
-# To avoid that, you can have a list of arguments, that take 2 args below.
-# Default is set to the corresponding pacman args
-NON_STD_ARGS="--dbpath --root --arch --cachedir --color --config --gpgdir --hookdir --logfile --sysroot --assume-installed --print-format --ignore --ignoregroup --overwrite -o --owns -s --search --asdeps --asexplicit"
-
-# Also if you want to change the location of this config file:
-# Export PAKT_CONF_PATH to the directory (e.g. /home/user/.config/pakt) with an absolute path (without / at the end).
+(?:\s+-)?

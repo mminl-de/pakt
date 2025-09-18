@@ -7,14 +7,14 @@ set -eu
 
 # Setting default options for config variables
 : "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
-mkdir -p "$PAKT_CAT_PATH"
 . "$PAKT_CONF_PATH/pakt.conf"
 
+: "${PAKT_CAT_PATH:=${XDG_DATA_HOME:-$HOME/.local/share}/pakt}"
 : "${PAKT_EDITOR:=${EDITOR:-nano}}"
 : "${CAT_SYNTAX:="+"}"
 : "${NO_ARG_ACTION:="pakt help"}"
-: "${PAKT_CAT_PATH:=${XDG_DATA_HOME:-$HOME/.local/share}/pakt}"
 : "${DEFAULT_CATS:=""}"
+mkdir -p "$PAKT_CAT_PATH"
 
 if [ $# -eq 0 ]; then
 	$NO_ARG_ACTION
@@ -37,11 +37,12 @@ Usage:
                                                 or arbitrary files
     pakt sync-uninstall (file | +cat)...      uninstall several packages from categories
                                                 or arbitary files
-    pakt list           list-arg...           list all user-defined categories
-    pakt cat            +cat...               list all packages in the given categories
+    pakt list           ls-arg...             list all user-defined categories
+    pakt cat            (file | +cat)...      list all packages in the given categories
     pakt find           pkg...                list categories the given packages are in
-    pakt native         arg...                perform a regular package manager operation
     pakt edit           (file | +cat)...      manually edit category or arbitary files
+    pakt purge          +cat...               delete entire category files
+    pakt native         arg...                perform a regular package manager operation
     pakt help                                 print this message
 
 Configuration:
@@ -58,23 +59,33 @@ error() {
 # Parses package manager flags and saves them in $cmd_args.
 # $pairs has this format:
 #
-# pkg1 cat1 cat2 ... catN
-# pkg2 cat1 ...
-# pkg3 ...
+# pkg1 cat1 cat2 ... catN : comment...
+# pkg2 cat1 ... : ...
+# pkg3 ... : ...
 # ...
 construct_pairs() {
 	cmd_args=""
 	pairs=""
 	pkgs=""
 	cats=""
+	comm=""
+	expecting_comm=0
 
 	for arg; do
+		[ $expecting_comm -eq 1 ] && {
+			comm="$arg"
+			expecting_comm=0
+			continue
+		}
 		case "$arg" in
 			$CAT_SYNTAX$CAT_SYNTAX)
 				cats=$(ls "$PAKT_CAT_PATH")
 				;;
 			$CAT_SYNTAX*)
 				cats="$cats ${arg#?}"
+				;;
+			:)
+				expecting_comm=1
 				;;
 			-*)
 				cmd_args="$cmd_args $arg"
@@ -94,23 +105,38 @@ construct_pairs() {
 # Sets both $pkgs and $cats to empty strings afterwards.
 update_pairs() {
 	for pkg in "$pkgs"; do
-		pairs="$pairs $pkg $cats $DEFAULT_CATS\n"
+		pairs="$pairs\n$pkg $cats $DEFAULT_CATS"
 	done
+	[ -n "$comm" ] && pairs="$pairs:$comm"
 	pkgs=""
 	cats=""
+	comm=""
 }
 
 # Reads the table expressed in $pairs and writes the names of the packages into
 # the files of their assigned categories, only if they weren't listed there before.
 write_from_pairs() {
+	echo "TODO write_from_pairs"
 	printf "$pairs\n" | while IFS= read -r line; do
 		[ -z "$line" ] && continue
+
+		before_comment=${line%:*}
+		comment=${line#*:}
+
 		set -- $line
 		pkg="$1"
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			grep -F "$pkg" "$file" >/dev/null 2>&1 || echo "$pkg" >> "$file"
+			echo "TODO using file $file"
+			grep -F "$pkg" "$file" >/dev/null 2>&1 || {
+				file_line="$pkg"
+				# TODO NOW yeah no, rework this system entirely please
+				# this could work in cases the user doesnt write a comments
+				# thats exactly the command prior
+				[ "$before_comment" != "$comment" ] && file_line="$file_line # $comment"
+				echo "$file_line" >> "$file"
+			}
 		done
 	done
 }
@@ -125,7 +151,7 @@ delete_from_pairs() {
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			sed -i "/^$pkg$/d" "$file"
+			sed -i "/^$pkg(?:\s|$)/d" "$file"
 		done
 	done
 }
@@ -141,6 +167,8 @@ construct_file_list() {
 				files=$(find "$PAKT_CAT_PATH")
 				;;
 			$CAT_SYNTAX*)
+				# TODO FINAL ALL CONSIDER replace #? with something that could also delete
+				# multiple leading characters
 				files="$files $PAKT_CAT_PATH/${arg#?}"
 				;;
 			*)
@@ -180,6 +208,7 @@ case "$1" in
 			exit 1
 		fi
 		construct_pairs "$@"
+		echo "TODO pairs: '$pairs'"
 		write_from_pairs
 		;;
 	dry-uninstall|du)
@@ -239,14 +268,37 @@ case "$1" in
 		[ -z "$result" ] && exit 1
 		printf "$result"
 		;;
-	native|n)
-		shift
-		$PACKAGE_MANAGER "$@"
-		;;
 	edit|e)
 		shift
 		construct_file_list "$@"
 		$PAKT_EDITOR $files
+		;;
+	purge|p)
+		cats=""
+		for arg; do
+			case "$arg" in
+				$CAT_SYNTAX$CAT_SYNTAX)
+					for cat in $(ls "$PAKT_CAT_PATH"); do
+						cats="$cats $CAT_SYNTAX$cat"
+					done
+					;;
+				$CAT_SYNTAX*)
+					cats="$cats $arg"
+					;;
+			esac
+		done
+		construct_file_list $cats
+
+		printf "$cats\nAre you sure you want to delete these categories? [y/N] "
+		read response
+		case "$response" in
+			[y/Y]|[y/Y][e/E][s/S]) rm -v $files; ;;
+			*) exit 1; ;;
+		esac
+		;;
+	native|n)
+		shift
+		$PACKAGE_MANAGER "$@"
 		;;
 	help|h)
 		help

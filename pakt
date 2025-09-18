@@ -7,14 +7,14 @@ set -eu
 
 # Setting default options for config variables
 : "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
+mkdir -p "$PAKT_CAT_PATH"
+. "$PAKT_CONF_PATH/pakt.conf"
+
 : "${PAKT_EDITOR:=${EDITOR:-nano}}"
 : "${CAT_SYNTAX:="+"}"
 : "${NO_ARG_ACTION:="pakt help"}"
 : "${PAKT_CAT_PATH:=${XDG_DATA_HOME:-$HOME/.local/share}/pakt}"
 : "${DEFAULT_CATS:=""}"
-mkdir -p "$PAKT_CAT_PATH"
-
-. "$PAKT_CONF_PATH/pakt.conf"
 
 if [ $# -eq 0 ]; then
 	$NO_ARG_ACTION

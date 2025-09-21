@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# TODO NOW DEBUG
+# "pakt di foo bar +baz : 'quz' " only registers foo
+
 set -eu
 
 # Setting default options for config variables
@@ -11,6 +14,7 @@ set -eu
 : "${CAT_SYNTAX:="+"}"
 : "${NO_ARG_ACTION:="pakt help"}"
 : "${DEFAULT_CATS:=""}"
+: "${REMOVE_EMPTY_CATS:=0}"
 mkdir -p "$PAKT_CAT_PATH"
 
 if [ $# -eq 0 ]; then
@@ -24,8 +28,8 @@ help() {
 
 Usage:
     pakt                                          perform a user-defined arbitrary action
-    pakt i(nstall)        (pkg [+cat ...])...     install packages
-    pakt u(ninstall)      (pkg [+cat ...])...     uninstall packages
+    pakt i(nstall)          (pkg [+cat ...])...   install packages
+    pakt u(ninstall)        (pkg [+cat ...])...   uninstall packages
     pakt d(ry-)i(nstall)    (pkg [+cat ...])...   write packages into categories without
                                                     installing them
     pakt d(ry-)u(ninstall)  (pkg [+cat ...])...   remove packages from categories without
@@ -34,26 +38,27 @@ Usage:
                                                     or arbitrary files
     pakt s(ync-)u(ninstall) (file | +cat)...      uninstall several packages from categories
                                                     or arbitary files
-    pakt l(ist)           ls-arg...               list all user-defined categories
-    pakt c(at)            (file | +cat)...        list all packages in the given categories
-    pakt f(ind)           pkg...                  list categories the given packages are in
-    pakt e(dit)           (file | +cat)...        manually edit category or arbitary files
-    pakt p(urge)          +cat...                 delete entire category files
-    pakt n(ative)         arg...                  perform a regular package manager operation
+    pakt l(ist)             ls-arg...             list all user-defined categories
+    pakt c(at)              (file | +cat)...      list all packages in the given categories
+    pakt f(ind)             pkg...                list categories the given packages are in
+    pakt e(dit)             (file | +cat)...      edit category or arbitary files manually
+    pakt p(urge)            +cat...               remove entire category files
+    pakt n(ative)           pm-arg...             perform a regular package manager operation
     pakt h(elp)                                   print this message
 
 Configuration:
     $PAKT_CONF_PATH/pakt.conf
 
 About:
-    v1.1.1  GPL-3.0  https://github.com/mminl-de/pakt
+    v1.1.2  GPL-3.0  https://github.com/mminl-de/pakt
     Sergey Lavrent <https://github.com/hiimsergey>
     MrMineDe <https://github.com/mrminede>"
 }
 
-# Prints a given message in red.
-error() {
+# Prints a given message in red and exits with status code 1.
+fail() {
 	printf "\x1b[31m$1\x1b[39m\n"
+	exit 1
 }
 
 # Constructs a multiline string table of involved packages and their corresponding
@@ -81,7 +86,7 @@ construct_pairs() {
 		}
 		case "$arg" in
 			$CAT_SYNTAX$CAT_SYNTAX)
-				cats=$(ls "$PAKT_CAT_PATH")
+				cats=$(ls "$PAKT_CAT_PATH" | tr "\n" " ")
 				;;
 			$CAT_SYNTAX*)
 				cats="$cats ${arg#?}"
@@ -118,25 +123,20 @@ update_pairs() {
 # Reads the table expressed in $pairs and writes the names of the packages into
 # the files of their assigned categories, only if they weren't listed there before.
 write_from_pairs() {
-	echo "TODO write_from_pairs"
 	printf "$pairs\n" | while IFS= read -r line; do
 		[ -z "$line" ] && continue
 
-		before_comment=${line%:*}
-		comment=${line#*:}
+		uncommented=$(printf "%s\n" "$line" | sed "s/:.*//")
+		comment=$(printf "%s\n" "$line" | sed -n "s/.*://p")
 
-		set -- $line
+		set -- $uncommented
 		pkg="$1"
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			echo "TODO using file $file"
 			grep -F "$pkg" "$file" >/dev/null 2>&1 || {
 				file_line="$pkg"
-				# TODO NOW yeah no, rework this system entirely please
-				# this could work in cases the user doesnt write a comments
-				# thats exactly the command prior
-				[ "$before_comment" != "$comment" ] && file_line="$file_line # $comment"
+				[ -n "$comment" ] && file_line="$file_line # $comment"
 				echo "$file_line" >> "$file"
 			}
 		done
@@ -153,7 +153,18 @@ delete_from_pairs() {
 		shift
 		for cat; do
 			file="$PAKT_CAT_PATH/$cat"
-			sed -i "/^$pkg(?:\s|$)/d" "$file"
+			filtered=""
+			while IFS= read -r line; do
+				# strip comments
+				uncommented=$(printf "%s\n" "$line" | sed "s/[[:space:]]*#.*//")
+				[ -z "$uncommented" ] && continue
+
+				case " $uncommented " in
+					*" $pkg "*) ;;
+					*) filtered="$filtered$line\n"; ;;
+				esac
+			done < "$file"
+			printf "$filtered" > "$file"
 		done
 	done
 }
@@ -169,9 +180,7 @@ construct_file_list() {
 				files=$(find "$PAKT_CAT_PATH")
 				;;
 			$CAT_SYNTAX*)
-				# TODO FINAL ALL CONSIDER replace #? with something that could also delete
-				# multiple leading characters
-				files="$files $PAKT_CAT_PATH/${arg#?}"
+				files="$files $PAKT_CAT_PATH/${arg#$CAT_SYNTAX}"
 				;;
 			*)
 				files="$files $arg"
@@ -183,20 +192,16 @@ construct_file_list() {
 case "$1" in
 	install|i)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing package names!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		construct_pairs "$@"
 		cmd="$PACKAGE_MANAGER $INSTALL_ARG $cmd_args"
 		$cmd && write_from_pairs
 		;;
 	uninstall|u)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing package names!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		construct_pairs "$@"
 		cmd="$PACKAGE_MANAGER $UNINSTALL_ARG $cmd_args"
 		$cmd && delete_from_pairs
@@ -205,20 +210,15 @@ case "$1" in
 		;;
 	dry-install|di)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing package names!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		construct_pairs "$@"
-		echo "TODO pairs: '$pairs'"
 		write_from_pairs
 		;;
 	dry-uninstall|du)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing package names!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		construct_pairs "$@"
 		delete_from_pairs
 
@@ -227,52 +227,50 @@ case "$1" in
 	# TODO HANDLE inline comments
 	sync-install|si)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
 		construct_file_list "$@"
-		$PACKAGE_MANAGER $INSTALL_ARG $(grep -rvh "#" $files)
+		$PACKAGE_MANAGER $INSTALL_ARG \
+			$(sed -e "s/[[:space:]]*#.*//; /^[[:space:]]*$/d" $files | tr "\n" " ")
 		;;
 	# TODO HANDLE inline comments
 	sync-uninstall|su)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
 		construct_file_list "$@"
-		echo "$PACKAGE_MANAGER $UNINSTALL_ARG $(grep -rvh "#" $files)"
+		$PACKAGE_MANAGER $UNINSTALL_ARG \
+			$(sed -e "s/[[:space:]]*#.*//; /^[[:space:]]*$/d" $files | tr "\n" " ")
 		;;
 	list|l)
 		shift
 		ls "$@" "$PAKT_CAT_PATH"
 		;;
-	# TODO HANDLE inline comments
 	cat|c)
 		shift
-		if [ $# -eq 0 ]; then
-			error "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
-			exit 1
-		fi
+		[ $# -eq 0 ] && \
+			fail "Missing category names/file paths!\nSee 'pakt help' for correct usage!"
 		construct_file_list "$@"
-		echo $(grep -rvh "#" $files)
+
+		# 1. strip away comments, 2. strip away empty lines
+		sed -e "s/[[:space:]]*#.*//; /^[[:space:]]*$/d" $files
 		;;
-	# TODO HANDLE inline comments
 	find|f)
 		shift
-		[ $# -eq 0 ] && {
-			error "Missing package names!\nSee 'pakt help' for correct usage!"
-			exit 1
-		}
+		[ $# -eq 0 ] && \
+			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		result=""
 		for arg; do
-			for file in $(grep -rl "$arg" "$PAKT_CAT_PATH"); do
-				result="$result$(basename "$file")\n"
+			for file in "$PAKT_CAT_PATH"/*; do
+				# 1. strip away comments
+				if sed "s/[[:space:]]*#.*//" "$file" | \
+					# 2. match against whole words
+					grep -E "(^|[[:space:]])$arg($|[[:space:]])" >/dev/null 2>&1; then
+					result="$result$(basename "$file")\n"
+				fi
 			done
 		done
-		[ -z "$result" ] && exit 1
-		printf "$result"
+		[ -z "$result" ] && exit 1 || printf "$result"
 		;;
 	edit|e)
 		shift
@@ -280,6 +278,9 @@ case "$1" in
 		$PAKT_EDITOR $files
 		;;
 	purge|p)
+		shift
+		[ $# -eq 0 ] && \
+			fail "Missing category names!\nSee 'pakt help' for correct usage!"
 		cats=""
 		for arg; do
 			case "$arg" in
@@ -290,6 +291,9 @@ case "$1" in
 					;;
 				$CAT_SYNTAX*)
 					cats="$cats $arg"
+					;;
+				*)
+					fail "'$arg' is not a category!\nSee 'pakt help' for correct usage!"
 					;;
 			esac
 		done
@@ -311,8 +315,6 @@ case "$1" in
 		exit
 		;;
 	*)
-		error "Invalid subcommand '$1'!
-See 'pakt help' for available options!\x1b[39m"
-		exit 1
+		fail "Invalid subcommand '$1'!\nSee 'pakt help' for available options!"
 		;;
 esac

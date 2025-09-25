@@ -5,6 +5,12 @@
 
 set -eu
 
+# Prints a given message in red and exits with status code 1.
+fail() {
+	printf "\x1b[31m$1\x1b[39m\n"
+	exit 1
+}
+
 # Setting default options for config variables
 : "${PAKT_CONF_PATH:=${XDG_CONFIG_HOME:-$HOME/.config}}"
 . "$PAKT_CONF_PATH/pakt.conf"
@@ -13,6 +19,10 @@ set -eu
 : "${PAKT_EDITOR:=${EDITOR:-nano}}"
 : "${CAT_SYNTAX:="+"}"
 : "${NO_ARG_ACTION:="pakt help"}"
+[ "$NO_ARG_ACTION" = "pakt" ] && {
+	fail "You can't set NO_ARG_ACTION to 'pakt' at $PAKT_CONF_PATH/pakt.conf!
+It causes a stack overflow."
+}
 : "${DEFAULT_CATS:=""}"
 : "${REMOVE_EMPTY_CATS:=0}"
 mkdir -p "$PAKT_CAT_PATH"
@@ -55,12 +65,6 @@ About:
     MrMineDe <https://github.com/mrminede>"
 }
 
-# Prints a given message in red and exits with status code 1.
-fail() {
-	printf "\x1b[31m$1\x1b[39m\n"
-	exit 1
-}
-
 # Constructs a multiline string table of involved packages and their corresponding
 # categories, given an argument list, and stores it in $pairs.
 # Parses package manager flags and saves them in $cmd_args.
@@ -89,7 +93,7 @@ construct_pairs() {
 				cats=$(ls "$PAKT_CAT_PATH" | tr "\n" " ")
 				;;
 			$CAT_SYNTAX*)
-				cats="$cats ${arg#?}"
+				cats="$cats ${arg#$CAT_SYNTAX}"
 				;;
 			:)
 				expecting_comm=1
@@ -99,7 +103,7 @@ construct_pairs() {
 				;;
 			*)
 				[ -n "$cats" ] && update_pairs
-				pkgs="$pkgs $arg"
+				pkgs="$pkgs\n$arg"
 				cmd_args="$cmd_args $arg"
 				;;
 		esac
@@ -111,10 +115,20 @@ construct_pairs() {
 # package listed in $pkgs.
 # Sets both $pkgs and $cats to empty strings afterwards.
 update_pairs() {
-	for pkg in "$pkgs"; do
+	echo -e "TODO once pkgs '$pkgs'"
+	# TODO FINAL REMOVE the %s from all printf calls
+	printf "$pkgs\n" | while IFS= read -r pkg; do
+		# TODO READ is there a more elegant solution?
+		[ -z "$pkg" ] && continue
+		echo "    TODO pkg '$pkg'"
+		# TODO NOW so we have a scoping problem. idk what to do
 		pairs="$pairs\n$pkg $cats $DEFAULT_CATS"
+		echo "    TODO pairs '$pairs'"
 	done
-	[ -n "$comm" ] && pairs="$pairs:$comm"
+	echo -e "TODO once pairs '$pairs'"
+	[ -n "$comm" ] && [ -n "$pairs" ] && pairs="$pairs:$comm" || \
+		fail "You can only place comments right after package names!
+See 'pakt help' for correct usage!" # TODO CONSIDER expanding the help page or use a man page
 	pkgs=""
 	cats=""
 	comm=""
@@ -123,7 +137,7 @@ update_pairs() {
 # Reads the table expressed in $pairs and writes the names of the packages into
 # the files of their assigned categories, only if they weren't listed there before.
 write_from_pairs() {
-	printf "$pairs\n" | while IFS= read -r line; do
+	printf "%s\n" "$pairs" | while IFS= read -r line; do
 		[ -z "$line" ] && continue
 
 		uncommented=$(printf "%s\n" "$line" | sed "s/:.*//")
@@ -146,7 +160,7 @@ write_from_pairs() {
 # Reads the table expressed in $pairs and removes the names of the packages from
 # the files of their assigned categories.
 delete_from_pairs() {
-	printf "$pairs\n" | while IFS= read -r line; do
+	printf "%s\n" "$pairs" | while IFS= read -r line; do
 		[ -z "$line" ] && continue
 		set -- $line
 		pkg="$1"
@@ -164,7 +178,7 @@ delete_from_pairs() {
 					*) filtered="$filtered$line\n"; ;;
 				esac
 			done < "$file"
-			printf "$filtered" > "$file"
+			printf "%s" "$filtered" > "$file"
 		done
 	done
 }
@@ -192,6 +206,7 @@ construct_file_list() {
 case "$1" in
 	install|i)
 		shift
+		# TODO DEBUG ts doesnt work for if the sole args are flags
 		[ $# -eq 0 ] && \
 			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		construct_pairs "$@"
@@ -200,6 +215,7 @@ case "$1" in
 		;;
 	uninstall|u)
 		shift
+		# TODO ALL DEBUG ts doesnt work for if the sole args are flags
 		[ $# -eq 0 ] && \
 			fail "Missing package names!\nSee 'pakt help' for correct usage!"
 		construct_pairs "$@"
@@ -270,7 +286,7 @@ case "$1" in
 				fi
 			done
 		done
-		[ -z "$result" ] && exit 1 || printf "$result"
+		[ -z "$result" ] && exit 1 || printf "%s" "$result"
 		;;
 	edit|e)
 		shift
@@ -299,7 +315,7 @@ case "$1" in
 		done
 		construct_file_list $cats
 
-		printf "$cats\nAre you sure you want to delete these categories? [y/N] "
+		printf "%s" "$cats\nAre you sure you want to delete these categories? [y/N] "
 		read response
 		case "$response" in
 			[y/Y]|[y/Y][e/E][s/S]) rm -v $files; ;;

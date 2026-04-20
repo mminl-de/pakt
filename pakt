@@ -115,16 +115,12 @@ construct_pairs() {
 # package listed in $pkgs.
 # Sets both $pkgs and $cats to empty strings afterwards.
 update_pairs() {
-	echo -e "TODO once pkgs '$pkgs'"
-	# TODO FINAL REMOVE the %s from all printf calls
-	printf "$pkgs\n" | while IFS= read -r pkg; do
-		# TODO READ is there a more elegant solution?
-		[ -z "$pkg" ] && continue
-		echo "    TODO pkg '$pkg'"
-		# TODO NOW so we have a scoping problem. idk what to do
+	IFS= read -r _ # skip empty first line
+	while IFS= read -r pkg; do
 		pairs="$pairs\n$pkg $cats $DEFAULT_CATS"
-		echo "    TODO pairs '$pairs'"
-	done
+	done <<EOF
+$(printf "$pkgs\n")
+EOF
 	echo -e "TODO once pairs '$pairs'"
 	[ -n "$comm" ] && [ -n "$pairs" ] && pairs="$pairs:$comm" || \
 		fail "You can only place comments right after package names!
@@ -137,9 +133,8 @@ See 'pakt help' for correct usage!" # TODO CONSIDER expanding the help page or u
 # Reads the table expressed in $pairs and writes the names of the packages into
 # the files of their assigned categories, only if they weren't listed there before.
 write_from_pairs() {
-	printf "%s\n" "$pairs" | while IFS= read -r line; do
-		[ -z "$line" ] && continue
-
+	IFS= read -r _ # skip empty first line
+	printf "$pairs\n" | while IFS= read -r line; do
 		uncommented=$(printf "%s\n" "$line" | sed "s/:.*//")
 		comment=$(printf "%s\n" "$line" | sed -n "s/.*://p")
 
@@ -160,8 +155,8 @@ write_from_pairs() {
 # Reads the table expressed in $pairs and removes the names of the packages from
 # the files of their assigned categories.
 delete_from_pairs() {
-	printf "%s\n" "$pairs" | while IFS= read -r line; do
-		[ -z "$line" ] && continue
+	IFS= read -r _ # skip empty first line
+	printf "$pairs\n" | while IFS= read -r line; do
 		set -- $line
 		pkg="$1"
 		shift
@@ -178,7 +173,7 @@ delete_from_pairs() {
 					*) filtered="$filtered$line\n"; ;;
 				esac
 			done < "$file"
-			printf "%s" "$filtered" > "$file"
+			printf "$filtered" > "$file"
 		done
 	done
 }
@@ -286,7 +281,7 @@ case "$1" in
 				fi
 			done
 		done
-		[ -z "$result" ] && exit 1 || printf "%s" "$result"
+		[ -z "$result" ] && exit 1 || printf "$result"
 		;;
 	edit|e)
 		shift
@@ -315,7 +310,7 @@ case "$1" in
 		done
 		construct_file_list $cats
 
-		printf "%s" "$cats\nAre you sure you want to delete these categories? [y/N] "
+		printf "$cats\nAre you sure you want to delete these categories? [y/N] "
 		read response
 		case "$response" in
 			[y/Y]|[y/Y][e/E][s/S]) rm -v $files; ;;

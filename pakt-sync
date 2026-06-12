@@ -75,7 +75,16 @@ done
 # Sync the packages
 if [ "$MODE" = "add" ]; then
 	for c in $CAT; do
-		while read -r p; do
+		while IFS= read -r p; do
+			# remove comments
+			p=${p%%#*}
+			# trim leading whitespace
+			p=${p#"${p%%[![:space:]]*}"}
+			# trim trailing whitespace
+			p=${p%"${p##*[![:space:]]}"}
+
+			[ -z "$p" ] && continue
+
 			# PAC_ADD should include all packages of the categoryfiles, that are not installed on the system
 			if stringNotContain "$(echo "$PAC_BASE" | tr '\n' ' ')" " $p "; then
 				PAC_ADD="${PAC_ADD} ${p}"
@@ -84,7 +93,18 @@ if [ "$MODE" = "add" ]; then
 	done
 elif [ "$MODE" = "rm" ]; then
 	for c in $CAT; do
-		PAC_DEL="${PAC_DEL} $(cat "$PTH/$c")"
+		while IFS= read -r p; do
+			p=${p%%#*}
+
+			# trim leading whitespace
+			p=${p#"${p%%[![:space:]]*}"}
+			# trim trailing whitespace
+			p=${p%"${p##*[![:space:]]}"}
+
+			[ -z "$p" ] && continue
+
+			PAC_DEL="${PAC_DEL} ${p}"
+		done < "$PTH/$c"
 	done
 	# We only want to remove packages we have installed.
 	PAC_ORIG_FILE=$(mktemp)
@@ -95,43 +115,62 @@ elif [ "$MODE" = "rm" ]; then
 	PAC_DEL=$(comm -12 "$PAC_ORIG_FILE" "$PAC_DEL_FILE"| tr '\n' ' ')
 
 elif [ "$MODE" = "sync" ]; then
-	PAC_DEL=$($MNL_PKG_CMD)
+	PAC_DEL="$($MNL_PKG_CMD) $($ALL_ORPHANS_PACKAGES_CMD)"
 	PAC_BASE=$($ALL_PKG_CMD)
 	PAC_ADD=""
 
 	# We want to combine all the categoriyfiles we got as parameter
 	for c in $CAT; do
-		# We unfortunately have to do this for every entry in every categoryfile...
-		while read -r p; do
-			# PAC_DEL should include all packages implicitly installed on the system by the user that are not in the categoryfiles
-			PAC_DEL=$(echo "$PAC_DEL" | tr ' ' '\n' | grep -v "^$p\$")
-			# PAC_ADD should include all packages of the categoryfiles, that are not installed on the system
-			if stringNotContain "$(echo "$PAC_BASE" | tr '\n' ' ')" " $p "; then
+		while IFS= read -r p; do
+			p=${p%%#*}
+
+			# trim leading whitespace
+			p=${p#"${p%%[![:space:]]*}"}
+			# trim trailing whitespace
+			p=${p%"${p##*[![:space:]]}"}
+
+			[ -z "$p" ] && continue
+
+			# remove exact match safely (no regex issues)
+			PAC_DEL=$(printf '%s\n' "$PAC_DEL" |
+				tr ' ' '\n' |
+				awk -v pkg="$p" '$0 != pkg' |
+				tr '\n' ' '
+			)
+
+			if stringNotContain "$(printf '%s\n' "$PAC_BASE" | tr '\n' ' ')" " $p "; then
 				PAC_ADD="${PAC_ADD} ${p}"
 			fi
 		done < "$PTH/$c"
 	done
-	# We convert spaces to new lines for grep a few lines ago, for pacman we need to reverse that
+
+	echo "cat: $CAT"
+	# echo "PAC_DEL: $PAC_DEL"
+	# We convert spaces to new lines for grep a few lines ago, for the package manager we need to reverse that
 	PAC_DEL=$(echo "$PAC_DEL" | tr '\n' ' ')
 fi
 
-# To be safe, we print the Packages to remove and install before calling pacman
-if [ -n "$PAC_DEL" ]; then
-	echo "Removing(dependencies not listed): $PAC_DEL"
-fi
+# To be safe, we print the Packages to remove and install before calling the package manager
+# if [ -n "$PAC_DEL" ]; then
+# 	echo "Removing(dependencies not listed): $PAC_DEL"
+# fi
 if [ -n "$PAC_ADD" ]; then
 	echo "Installing: $PAC_ADD"
 fi
 # Finally sync the packages
 if [ -n "$PAC_DEL" ]; then
-	if ! $CMD $CMD_ARG_UNINSTALL $PAC_DEL; then
-		echo "Pacman returned a fail. Exiting..."
+	# run package manager
+	$CMD $CMD_ARG_UNINSTALL $PAC_DEL
+	ret=$?
+
+	if [ $ret -ne 0 ]; then
+		echo "package manager returned a fail. Exiting..."
 		exit
 	fi
 fi
 if [ -n "$PAC_ADD" ]; then
 	if ! $CMD $CMD_ARG_INSTALL $PAC_ADD; then
-		echo "Pacman returned a fail. Exiting..."
+		echo "package manager returned a fail. Exiting..."
 		exit
 	fi
 fi

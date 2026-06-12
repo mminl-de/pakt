@@ -4,21 +4,11 @@
 # If you want to be extra cautious, make it read-only for normal users.
 # Also be warned about the possibilities of defining PAKT_CONFIG_PATH
 
-# This defines the default categories that are always included when running pakt.
-DEFAULT_CATEGORIES="default"
-
-# Pacman or an AUR helper that you want to use. Also some other options of it.
-# If you want to use a tool that is normally invoked with sudo (or doas), include it here.
-PACKAGE_MANAGER="sudo pacman"
-# The argument needed to install packages, Syntax: $PACKAGE_MANAGER $PACKAGE_MANAGER_ARG_INSTALL PACKAGES
-# Here you could also define, that when we install packages we should also do a full system upgrade
-PACKAGE_MANAGER_ARG_INSTALL="-Sy"
-# The argument needed to uninstall packages, Syntax: $PACKAGE_MANAGER $PACKAGE_MANAGER_ARG_UNINSTALL PACKAGES
-PACKAGE_MANAGER_ARG_UNINSTALL="-Rs"
-# Command to get all installed packages
-ALL_INSTALLED_PACKAGES_CMD="$PACKAGE_MANAGER -Qq"
-# Command to get all packages manually installed by the user (basically excluding all dependencies)
-ALL_MANUAL_INSTALLED_PACKAGES_CMD="$PACKAGE_MANAGER -Qeq"
+sync_exclusive() {
+	if [ $0 = "pakt-sync" ]; then
+		ls -A "$PAKT_PATH"
+	fi
+}
 
 # The path where the package files will be stored.
 # The default is $XDG_DATA_HOME/pakt or .local/share/pakt if XDG is undefined.
@@ -27,6 +17,46 @@ if [ -z $XDG_DATA_HOME ]; then
 fi
 PAKT_PATH="$XDG_DATA_HOME/pakt"
 
+# Pacman or an AUR helper that you want to use. Also some other options of it.
+# If you want to use a tool that is normally invoked with sudo (or doas), include it here.
+PACKAGE_MANAGER="sudo pacman"
+
+# This marks all packages in the pakt path as explicitly installed, not as dependencie.
+# This is needed, because otherwise pacman may remove it, even though it is in the list,
+# if its not needed by any package. Its also logical to do this, as something you explicitly want to install
+# through the pakt files, shouldnt/cant be a dependencie.
+PKGS=""
+for f in "$PAKT_PATH"/*; do
+    while IFS= read -r p; do
+        p=${p%%#*}
+
+        # trim leading whitespace
+        p=${p#"${p%%[![:space:]]*}"}
+        # trim trailing whitespace
+        p=${p%"${p##*[![:space:]]}"}
+
+        [ -z "$p" ] && continue
+
+        PKGS="${PKGS} ${p}"
+    done < "$f"
+done
+$PACKAGE_MANAGER -D --asexplicit $PKGS > /dev/null
+
+# The argument needed to install packages, Syntax: $PACKAGE_MANAGER $PACKAGE_MANAGER_ARG_INSTALL PACKAGES
+# Here you could also define, that when we install packages we should also do a full system upgrade
+PACKAGE_MANAGER_ARG_INSTALL="-Sy"
+# The argument needed to uninstall packages, Syntax: $PACKAGE_MANAGER $PACKAGE_MANAGER_ARG_UNINSTALL PACKAGES
+PACKAGE_MANAGER_ARG_UNINSTALL="-Rsu"
+# Command to get all installed packages
+ALL_INSTALLED_PACKAGES_CMD="$PACKAGE_MANAGER -Qq"
+# Command to get all packages manually installed by the user (basically excluding all dependencies)
+ALL_MANUAL_INSTALLED_PACKAGES_CMD="$PACKAGE_MANAGER -Qq"
+# Command to get all packages manually installed by the user (basically excluding all dependencies)
+ALL_ORPHANS_PACKAGES_CMD=""
+
+
+# This defines the default categories that are always included when running pakt.
+DEFAULT_CATEGORIES="default $(for f in "$PAKT_PATH"/*; do basename "$f"; done)"
 
 # Also if you want to change the location of this config file:
 # Export PAKT_CONF_PATH to the directory (e.g. /home/user/.config/pakt) with an absolute path (without / at the end).
